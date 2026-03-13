@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>8M Residences â Sell or Rent?</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+  <style>
+    input[type="range"] { -webkit-appearance: none; appearance: none; height: 8px; background: #e5e7eb; border-radius: 9999px; outline: none; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #0d9488; cursor: pointer; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #0d9488; cursor: pointer; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    .border-teal-200 { border-color: #99f6e4; } .bg-teal-50 { background-color: #f0fdfa; }
+    .border-teal-300 { border-color: #5eead4; } .bg-teal-100 { background-color: #ccfbf1; }
+    .border-teal-400 { border-color: #2dd4bf; } .bg-teal-500 { background-color: #14b8a6; }
+    .bg-teal-600 { background-color: #0d9488; } .text-teal-700 { color: #0f766e; }
+    .border-amber-200 { border-color: #fde68a; } .bg-amber-50 { background-color: #fffbeb; }
+    .border-amber-300 { border-color: #fcd34d; } .text-amber-700 { color: #b45309; }
+    .border-purple-200 { border-color: #ddd6fe; } .bg-purple-50 { background-color: #f5f3ff; }
+    .border-green-300 { border-color: #86efac; }
+    .border-red-300 { border-color: #fca5a5; }
+    .translate-x-4 { transform: translateX(1rem); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+    const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area } = Recharts;
+
+    const fmt = (n) => new Intl.NumberFormat("en-SG", { style: "currency", currency: "SGD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
+    const fmtPct = (n) => n.toFixed(2) + "%";
+
+    function SliderInput({ label, value, onChange, min, max, step, format = "currency", suffix = "", prefix = "" }) {
+      const displayVal = format === "currency" ? fmt(value) : format === "percent" ? value + "%" : prefix + value + suffix;
+      return (
+        <div style={{ marginBottom: "0.75rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+            <span className="text-sm font-medium text-gray-700">{label}</span>
+            <span className="text-sm font-bold text-gray-900">{displayVal}</span>
+          </div>
+          <input type="range" min={min} max={max} step={step} value={value}
+            onChange={(e) => onChange(Number(e.target.value))}
+            style={{ width: "100%" }} />
+          <div style={{ display: "flex", justifyContent: "space-between" }} className="text-xs text-gray-400" >
+            <span>{format === "currency" ? fmt(min) : format === "percent" ? min + "%" : prefix + min + suffix}</span>
+            <span>{format === "currency" ? fmt(max) : format === "percent" ? max + "%" : prefix + max + suffix}</span>
+          </div>
+        </div>
+      );
+    }
+
+    function Card({ title, children, color = "gray", className = "" }) {
+      const styles = {
+        teal: { border: "2px solid #99f6e4", background: "#f0fdfa" },
+        red: { border: "2px solid #fca5a5", background: "#fef2f2" },
+        blue: { border: "2px solid #93c5fd", background: "#eff6ff" },
+        amber: { border: "2px solid #fde68a", background: "#fffbeb" },
+        gray: { border: "2px solid #e5e7eb", background: "#f9fafb" },
+        green: { border: "2px solid #86efac", background: "#f0fdf4" },
+        purple: { border: "2px solid #ddd6fe", background: "#f5f3ff" },
+      };
+      const s = styles[color] || styles.gray;
+      return (
+        <div style={{ borderRadius: "0.75rem", ...s, padding: "1rem", marginBottom: className.includes("mb-6") ? "1.5rem" : "0" }}>
+          {title && <h3 className="font-bold text-gray-900" style={{ marginBottom: "0.75rem", fontSize: "1.125rem" }}>{title}</h3>}
+          {children}
+        </div>
+      );
+    }
+
+    function MetricRow({ label, value, subtext, positive }) {
+      const color = positive === true ? "#16a34a" : positive === false ? "#dc2626" : "#111827";
+      return (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "0.5rem 0", borderBottom: "1px solid #f3f4f6" }}>
+          <div>
+            <div className="text-sm text-gray-600">{label}</div>
+            {subtext && <div className="text-xs text-gray-400">{subtext}</div>}
+          </div>
+          <div style={{ fontWeight: "bold", textAlign: "right", color }}>{value}</div>
+        </div>
+      );
+    }
+
+    function ScenarioToggle({ label, description, active, onChange, impact }) {
+      return (
+        <div onClick={() => onChange(!active)}
+          style={{ padding: "0.75rem", borderRadius: "0.5rem", border: active ? "2px solid #2dd4bf" : "2px solid #e5e7eb", background: active ? "#f0fdfa" : "white", cursor: "pointer", marginBottom: "0.5rem", transition: "all 0.2s" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ flex: 1 }}>
+              <div className="font-semibold text-sm text-gray-800">{label}</div>
+              <div className="text-xs text-gray-500" style={{ marginTop: "0.125rem" }}>{description}</div>
+            </div>
+            <div style={{ width: "2.5rem", height: "1.5rem", borderRadius: "9999px", padding: "0.125rem", transition: "background 0.2s", background: active ? "#14b8a6" : "#d1d5db" }}>
+              <div style={{ width: "1.25rem", height: "1.25rem", background: "white", borderRadius: "50%", boxShadow: "0 1px 2px rgba(0,0,0,0.2)", transition: "transform 0.2s", transform: active ? "translateX(1rem)" : "translateX(0)" }} />
+            </div>
+          </div>
+          {active && impact && (
+            <div style={{ marginTop: "0.5rem", padding: "0.5rem", borderRadius: "0.25rem", background: "#ccfbf1" }} className="text-xs text-teal-700">{impact}</div>
+          )}
+        </div>
+      );
+    }
+
+    function TabButton({ active, label, onClick }) {
+      return (
+        <button onClick={onClick}
+          style={{ padding: "0.625rem 1.25rem", fontWeight: 600, fontSize: "0.875rem", borderRadius: "0.5rem", border: active ? "none" : "1px solid #e5e7eb", background: active ? "#0d9488" : "white", color: active ? "white" : "#4b5563", cursor: "pointer", boxShadow: active ? "0 4px 6px rgba(0,0,0,0.1)" : "none", transition: "all 0.2s" }}>
+          {label}
+        </button>
+      );
+    }
+
+    function computeSellScenario({ salePrice, mortgage, cpfPrincipal, cpfInterest, commissionRate }) {
+      const commission = salePrice * (commissionRate / 100);
+      const cpfRefund = cpfPrincipal + cpfInterest;
+      const netCash = salePrice - commission - mortgage - cpfRefund;
+      return { salePrice, commission, mortgage, cpfRefund, netCash };
+    }
+
+    function computeRentScenario({ propertyValue, mortgage, monthlyPayment, fixedRate, fixedMonths, floatingRate, loanTenureMonths, monthlyMaintenance, monthlyTax, monthlyRent, vacancyMonths, annualAppreciation, years }) {
+      let balance = mortgage;
+      let cumulativeCashFlow = 0;
+      let totalEquityBuilt = 0;
+      const monthlyData = [];
+      const yearlyData = [];
+
+      for (let m = 1; m <= years * 12; m++) {
+        const rate = m <= fixedMonths ? fixedRate : floatingRate;
+        const monthlyRate = rate / 100 / 12;
+        const remainingMonths = loanTenureMonths - m + 1;
+
+        let payment;
+        if (m <= fixedMonths) {
+          payment = monthlyPayment;
+        } else if (m === fixedMonths + 1) {
+          payment = balance * (monthlyRate * Math.pow(1 + monthlyRate, remainingMonths)) / (Math.pow(1 + monthlyRate, remainingMonths) - 1);
+        } else {
+          payment = monthlyData[m - 2]?.newPayment || monthlyPayment;
+        }
+
+        const interestPortion = balance * monthlyRate;
+        const principalPortion = payment - interestPortion;
+        balance = Math.max(0, balance - principalPortion);
+        totalEquityBuilt += principalPortion;
+
+        const isVacant = m <= vacancyMonths;
+        const rentIncome = isVacant ? 0 : monthlyRent;
+        const netCashFlow = rentIncome - payment - monthlyMaintenance - monthlyTax;
+        cumulativeCashFlow += netCashFlow;
+
+        monthlyData.push({ month: m, balance, interestPortion, principalPortion, payment, rentIncome, netCashFlow, cumulativeCashFlow, totalEquityBuilt, newPayment: payment });
+
+        if (m % 12 === 0) {
+          const year = m / 12;
+          const propertyVal = propertyValue * Math.pow(1 + annualAppreciation / 100, year);
+          const appreciation = propertyVal - propertyValue;
+          yearlyData.push({ year, balance, cumulativeCashFlow, totalEquityBuilt, propertyValue: propertyVal, appreciation, totalReturn: cumulativeCashFlow + totalEquityBuilt + appreciation, monthlyPayment: payment });
+        }
+      }
+      return { monthlyData, yearlyData };
+    }
+
+    const URA_INDEX_DATA = [
+      { quarter: "Q1'22", index: 176.6 }, { quarter: "Q2'22", index: 180.4 }, { quarter: "Q3'22", index: 185.5 }, { quarter: "Q4'22", index: 188.6 },
+      { quarter: "Q1'23", index: 191.5 }, { quarter: "Q2'23", index: 191.8 }, { quarter: "Q3'23", index: 192.6 }, { quarter: "Q4'23", index: 193.1 },
+      { quarter: "Q1'24", index: 194.6 }, { quarter: "Q2'24", index: 196.0 }, { quarter: "Q3'24", index: 198.1 }, { quarter: "Q4'24", index: 199.3 },
+      { quarter: "Q1'25", index: 201.5 }, { quarter: "Q2'25", index: 203.2 }, { quarter: "Q3'25", index: 205.6 }, { quarter: "Q4'25", index: 207.0 },
+    ];
+
+    const INTEREST_RATE_DATA = [
+      { period: "Q1'24", sora3m: 3.65, fixed2y: 3.20 }, { period: "Q2'24", sora3m: 3.60, fixed2y: 3.10 },
+      { period: "Q3'24", sora3m: 3.30, fixed2y: 2.85 }, { period: "Q4'24", sora3m: 2.80, fixed2y: 2.50 },
+      { period: "Q1'25", sora3m: 2.30, fixed2y: 2.10 }, { period: "Q2'25", sora3m: 1.90, fixed2y: 1.75 },
+      { period: "Q3'25", sora3m: 1.50, fixed2y: 1.55 }, { period: "Q4'25", sora3m: 1.25, fixed2y: 1.40 },
+      { period: "Q1'26", sora3m: 1.12, fixed2y: 1.35 }, { period: "Q2'26F", sora3m: 1.00, fixed2y: 1.30 },
+      { period: "Q3'26F", sora3m: 1.20, fixed2y: 1.40 }, { period: "Q4'26F", sora3m: 1.35, fixed2y: 1.50 },
+    ];
+
+    const SUPPLY_PIPELINE = [
+      { year: "2024", units: 6200, label: "Actual" }, { year: "2025", units: 7100, label: "Actual" },
+      { year: "2026", units: 8400, label: "Expected" }, { year: "2027", units: 9200, label: "Projected" },
+      { year: "2028", units: 7500, label: "Projected" },
+    ];
+
+    function App() {
+      const [activeTab, setActiveTab] = useState("sellvsrent");
+      const [salePrice, setSalePrice] = useState(1160000);
+      const [expectedRent, setExpectedRent] = useState(3200);
+      const [vacancyMonths, setVacancyMonths] = useState(2);
+      const [postFixedRate, setPostFixedRate] = useState(2.5);
+      const [annualAppreciation, setAnnualAppreciation] = useState(2.5);
+      const [analysisYears, setAnalysisYears] = useState(5);
+      const [commissionRate, setCommissionRate] = useState(2);
+      const [investReturnRate, setInvestReturnRate] = useState(4);
+      const [absdReduction, setAbsdReduction] = useState(false);
+      const [iranEscalation, setIranEscalation] = useState(false);
+      const [rateHike, setRateHike] = useState(false);
+      const [supplyGlut, setSupplyGlut] = useState(false);
+
+      const PROPERTY = {
+        type: "1-Bedroom + Study", sqft: 527, floor: 9, tenure: "Freehold",
+        district: "D15 (Marine Parade / East Coast)", mortgage: 701540,
+        cpfPrincipal: 174348.84, cpfInterest: 23281.82, monthlyPayment: 2799.35,
+        fixedRate: 1.55, fixedMonths: 24, loanTenureMonths: 303,
+        monthlyMaintenance: 375, monthlyTax: 309.60, currentRent: 3600, personalRent: 2900,
+      };
+
+      const sellResult = useMemo(() => computeSellScenario({
+        salePrice, mortgage: PROPERTY.mortgage,
+        cpfPrincipal: PROPERTY.cpfPrincipal, cpfInterest: PROPERTY.cpfInterest, commissionRate
+      }), [salePrice, commissionRate]);
+
+      const rentResult = useMemo(() => computeRentScenario({
+        propertyValue: salePrice, mortgage: PROPERTY.mortgage, monthlyPayment: PROPERTY.monthlyPayment,
+        fixedRate: PROPERTY.fixedRate, fixedMonths: PROPERTY.fixedMonths, floatingRate: postFixedRate,
+        loanTenureMonths: PROPERTY.loanTenureMonths, monthlyMaintenance: PROPERTY.monthlyMaintenance,
+        monthlyTax: PROPERTY.monthlyTax, monthlyRent: expectedRent, vacancyMonths, annualAppreciation, years: analysisYears,
+      }), [salePrice, expectedRent, vacancyMonths, postFixedRate, annualAppreciation, analysisYears]);
+
+      const investmentGrowth = useMemo(() => {
+        const netCash = sellResult.netCash;
+        const data = [];
+        for (let y = 1; y <= analysisYears; y++) {
+          const invested = netCash * Math.pow(1 + investReturnRate / 100, y);
+          const gains = invested - netCash;
+          data.push({ year: y, invested, gains });
+        }
+        return data;
+      }, [sellResult.netCash, investReturnRate, analysisYears]);
+
+      const comparisonData = useMemo(() => {
+        const netCash = sellResult.netCash;
+        return rentResult.yearlyData.map((ry) => {
+          const sellInvested = netCash * Math.pow(1 + investReturnRate / 100, ry.year);
+          const sellTotal = sellInvested - netCash;
+          return {
+            year: "Year " + ry.year,
+            "Rent: Total Return": Math.round(ry.totalReturn),
+            "Sell: Investment Gains": Math.round(sellTotal),
+          };
+        });
+      }, [rentResult, sellResult, investReturnRate]);
+
+      const scenarioAppreciation = useMemo(() => {
+        let adj = annualAppreciation;
+        if (absdReduction) adj += 1.5;
+        if (iranEscalation) adj -= 1.0;
+        if (rateHike) adj -= 1.5;
+        if (supplyGlut) adj -= 1.0;
+        return adj;
+      }, [annualAppreciation, absdReduction, iranEscalation, rateHike, supplyGlut]);
+
+      const monthlyCashFlowExpected = expectedRent - PROPERTY.monthlyPayment - PROPERTY.monthlyMaintenance - PROPERTY.monthlyTax;
+      const monthlyInterest = PROPERTY.mortgage * (PROPERTY.fixedRate / 100 / 12);
+      const monthlyPrincipal = PROPERTY.monthlyPayment - monthlyInterest;
+      const psf = salePrice / PROPERTY.sqft;
+      const grossYield = (expectedRent * 12) / salePrice * 100;
+
+      const verdict = useMemo(() => {
+        const lastYear = rentResult.yearlyData[rentResult.yearlyData.length - 1];
+        const netCash = sellResult.netCash;
+        const sellGains = netCash * Math.pow(1 + investReturnRate / 100, analysisYears) - netCash;
+        const rentReturn = lastYear?.totalReturn || 0;
+        if (sellGains > rentReturn + 20000) {
+          return { recommendation: "SELL", color: "red", reason: "Over " + analysisYears + " years, selling and investing the proceeds is projected to outperform renting by " + fmt(sellGains - rentReturn) + ". With negative monthly cash flow, selling frees up capital and eliminates risk." };
+        } else if (rentReturn > sellGains + 20000) {
+          return { recommendation: "RENT", color: "green", reason: "Over " + analysisYears + " years, holding and renting is projected to outperform selling by " + fmt(rentReturn - sellGains) + ", mainly driven by property appreciation and equity buildup." };
+        } else {
+          return { recommendation: "CLOSE CALL", color: "amber", reason: "The difference between selling and renting is within " + fmt(Math.abs(sellGains - rentReturn)) + " over " + analysisYears + " years. Your decision should weigh cash flow needs, risk tolerance, and market outlook." };
+        }
+      }, [rentResult, sellResult, investReturnRate, analysisYears]);
+
+      const verdictBg = verdict.color === "red" ? "#fef2f2" : verdict.color === "green" ? "#f0fdf4" : "#fffbeb";
+      const verdictBorder = verdict.color === "red" ? "#fca5a5" : verdict.color === "green" ? "#86efac" : "#fcd34d";
+      const verdictTextColor = verdict.color === "red" ? "#b91c1c" : verdict.color === "green" ? "#15803d" : "#b45309";
+
+      return (
+        <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #f9fafb, #f0fdfa)", padding: "1.5rem" }}>
+          <div style={{ maxWidth: "72rem", margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+              <h1 className="font-bold text-gray-900" style={{ fontSize: "1.875rem", marginBottom: "0.25rem" }}>8M Residences â Sell or Rent?</h1>
+              <p className="text-gray-500 text-sm">{PROPERTY.type} Â· {PROPERTY.sqft} sqft Â· Floor {PROPERTY.floor} Â· {PROPERTY.tenure} Â· {PROPERTY.district}</p>
+            </div>
+
+            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", justifyContent: "center" }}>
+              <TabButton active={activeTab === "sellvsrent"} label="Sell vs Rent Calculator" onClick={() => setActiveTab("sellvsrent")} />
+              <TabButton active={activeTab === "market"} label="Market Dashboard" onClick={() => setActiveTab("market")} />
+            </div>
+
+            {activeTab === "sellvsrent" && (
+              <div>
+                {/* Verdict */}
+                <div style={{ borderRadius: "0.75rem", padding: "1rem", marginBottom: "1.5rem", border: "2px solid " + verdictBorder, background: verdictBg, textAlign: "center" }}>
+                  <div style={{ fontSize: "1.5rem", fontWeight: "bold", marginBottom: "0.25rem", color: verdictTextColor }}>
+                    Projected Outcome: {verdict.recommendation}
+                  </div>
+                  <p className="text-sm text-gray-700" style={{ maxWidth: "42rem", margin: "0 auto" }}>{verdict.reason}</p>
+                  <p className="text-xs text-gray-400" style={{ marginTop: "0.5rem", fontStyle: "italic" }}>Not financial advice. Adjust the inputs below to test different scenarios.</p>
+                </div>
+
+                {/* Inputs */}
+                <Card title="Adjust Your Assumptions" color="gray" className="mb-6">
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
+                    <div>
+                      <SliderInput label="Sale Price" value={salePrice} onChange={setSalePrice} min={1100000} max={1250000} step={10000} format="currency" />
+                      <div className="text-xs text-gray-400" style={{ textAlign: "center" }}>{fmt(psf)} PSF</div>
+                    </div>
+                    <div>
+                      <SliderInput label="Expected Monthly Rent" value={expectedRent} onChange={setExpectedRent} min={2800} max={4000} step={100} format="currency" />
+                      <div className="text-xs text-gray-400" style={{ textAlign: "center" }}>Yield: {fmtPct(grossYield)}</div>
+                    </div>
+                    <SliderInput label="Vacancy (months)" value={vacancyMonths} onChange={setVacancyMonths} min={0} max={6} step={1} format="number" suffix=" months" />
+                    <SliderInput label="Post-Fixed Interest Rate" value={postFixedRate} onChange={setPostFixedRate} min={1.5} max={4.5} step={0.1} format="percent" />
+                    <SliderInput label="Annual Appreciation" value={annualAppreciation} onChange={setAnnualAppreciation} min={-2} max={6} step={0.5} format="percent" />
+                    <SliderInput label="Analysis Period" value={analysisYears} onChange={setAnalysisYears} min={1} max={10} step={1} format="number" suffix=" years" />
+                    <SliderInput label="Agent Commission" value={commissionRate} onChange={setCommissionRate} min={1} max={3} step={0.25} format="percent" />
+                    <SliderInput label="Investment Return (if sell)" value={investReturnRate} onChange={setInvestReturnRate} min={1} max={8} step={0.5} format="percent" />
+                  </div>
+                </Card>
+
+                {/* Side by Side */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+                  <Card title="Sell Scenario" color="red">
+                    <div style={{ marginBottom: "1rem", padding: "0.75rem", background: "white", borderRadius: "0.5rem", textAlign: "center" }}>
+                      <div className="text-sm text-gray-500">Net Cash in Hand</div>
+                      <div style={{ fontSize: "1.875rem", fontWeight: "bold", color: "#dc2626" }}>{fmt(sellResult.netCash)}</div>
+                      <div className="text-xs text-gray-400" style={{ marginTop: "0.25rem" }}>After mortgage, CPF refund, and commission</div>
+                    </div>
+                    <MetricRow label="Sale Price" value={fmt(sellResult.salePrice)} />
+                    <MetricRow label={"Agent Commission (" + commissionRate + "%)"} value={"-" + fmt(sellResult.commission)} positive={false} />
+                    <MetricRow label="Outstanding Mortgage" value={"-" + fmt(sellResult.mortgage)} positive={false} />
+                    <MetricRow label="CPF Refund" subtext={"$" + (PROPERTY.cpfPrincipal/1000).toFixed(1) + "k principal + $" + (PROPERTY.cpfInterest/1000).toFixed(1) + "k accrued interest"} value={"-" + fmt(sellResult.cpfRefund)} positive={false} />
+                    <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "2px solid #fca5a5" }}>
+                      <MetricRow label="Investable Cash" value={fmt(sellResult.netCash)} positive={true} />
+                    </div>
+                    <div style={{ marginTop: "0.75rem", padding: "0.75rem", background: "white", borderRadius: "0.5rem" }}>
+                      <div className="text-sm font-semibold text-gray-700" style={{ marginBottom: "0.5rem" }}>If Invested at {investReturnRate}% p.a.:</div>
+                      {investmentGrowth.map(d => (
+                        <div key={d.year} style={{ display: "flex", justifyContent: "space-between", padding: "0.125rem 0" }} className="text-sm">
+                          <span className="text-gray-500">Year {d.year}</span>
+                          <span className="font-medium text-gray-800">{fmt(d.invested)} <span style={{ color: "#16a34a" }}>(+{fmt(d.gains)})</span></span>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+
+                  <Card title="Rent Out Scenario" color="green">
+                    <div style={{ marginBottom: "1rem", padding: "0.75rem", background: "white", borderRadius: "0.5rem", textAlign: "center" }}>
+                      <div className="text-sm text-gray-500">Monthly Cash Flow (Post-Vacancy)</div>
+                      <div style={{ fontSize: "1.875rem", fontWeight: "bold", color: monthlyCashFlowExpected >= 0 ? "#16a34a" : "#dc2626" }}>{fmt(monthlyCashFlowExpected)}/mo</div>
+                      <div className="text-xs text-gray-400" style={{ marginTop: "0.25rem" }}>At {fmt(expectedRent)} rent Â· {monthlyCashFlowExpected >= 0 ? "Cash flow positive" : "Cash flow negative"}</div>
+                    </div>
+                    <MetricRow label="Monthly Rent Income" value={fmt(expectedRent)} positive={true} />
+                    <MetricRow label="Mortgage Repayment" subtext={fmt(monthlyInterest) + " interest + " + fmt(monthlyPrincipal) + " principal"} value={"-" + fmt(PROPERTY.monthlyPayment)} positive={false} />
+                    <MetricRow label="Condo Maintenance" value={"-" + fmt(PROPERTY.monthlyMaintenance)} positive={false} />
+                    <MetricRow label="Property Tax" value={"-" + fmt(PROPERTY.monthlyTax)} positive={false} />
+                    <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "2px solid #86efac" }}>
+                      <MetricRow label="Net Cash Flow" value={fmt(monthlyCashFlowExpected) + "/mo"} positive={monthlyCashFlowExpected >= 0} />
+                      <MetricRow label="Equity Buildup" subtext="Principal repayment builds ownership" value={"+" + fmt(monthlyPrincipal) + "/mo"} positive={true} />
+                      <MetricRow label="Gross Rental Yield" value={fmtPct(grossYield)} />
+                    </div>
+                    <div style={{ marginTop: "0.75rem", padding: "0.75rem", background: "white", borderRadius: "0.5rem" }}>
+                      <div className="text-sm font-semibold text-gray-700" style={{ marginBottom: "0.5rem" }}>Projected Over Time ({annualAppreciation}% appreciation):</div>
+                      {rentResult.yearlyData.map(d => (
+                        <div key={d.year} style={{ display: "flex", justifyContent: "space-between", padding: "0.125rem 0" }} className="text-sm">
+                          <span className="text-gray-500">Year {d.year}</span>
+                          <span className="font-medium text-gray-800">Total Return: <span style={{ color: d.totalReturn >= 0 ? "#16a34a" : "#dc2626" }}>{fmt(d.totalReturn)}</span></span>
+                        </div>
+                      ))}
+                      <div className="text-xs text-gray-400" style={{ marginTop: "0.5rem" }}>Total Return = Cash Flow + Equity Buildup + Appreciation</div>
+                    </div>
+                  </Card>
+                </div>
+
+                {/* Comparison Chart */}
+                <Card title={"Cumulative Returns Comparison (" + analysisYears + " Years)"} color="blue" className="mb-6">
+                  <ResponsiveContainer width="100%" height={320}>
+                    <BarChart data={comparisonData} margin={{ top: 10, right: 20, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="year" tick={{ fontSize: 12 }} />
+                      <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} tick={{ fontSize: 12 }} />
+                      <Tooltip formatter={(v) => fmt(v)} />
+                      <Legend />
+                      <Bar dataKey="Sell: Investment Gains" fill="#dc2626" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Rent: Total Return" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+
+                {/* Risks */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+                  <Card title="Key Risks if You Sell" color="red">
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }} className="text-sm text-gray-700">
+                      <div style={{ display: "flex", gap: "0.5rem" }}><span>â ï¸</span><span>Miss out on freehold appreciation in a prime D15 location near new Thomson-East Coast MRT Line</span></div>
+                      <div style={{ display: "flex", gap: "0.5rem" }}><span>â ï¸</span><span>Locked your refinanced rate at 1.55% â below current market of 1.30-1.45%. Lose this advantage on sale</span></div>
+                      <div style={{ display: "flex", gap: "0.5rem" }}><span>â ï¸</span><span>15-month cooling period before you can buy a resale HDB</span></div>
+                      <div style={{ display: "flex", gap: "0.5rem" }}><span>â ï¸</span><span>20% ABSD if you buy a 2nd private property in future</span></div>
+                    </div>
+                  </Card>
+                  <Card title="Key Risks if You Rent Out" color="green">
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }} className="text-sm text-gray-700">
+                      <div style={{ display: "flex", gap: "0.5rem" }}><span>â ï¸</span><span>Negative cash flow of {fmt(monthlyCashFlowExpected)}/mo at {fmt(expectedRent)} rent â you're subsidising the property</span></div>
+                      <div style={{ display: "flex", gap: "0.5rem" }}><span>â ï¸</span><span>New competing condo nearby may push rents lower or extend vacancy</span></div>
+                      <div style={{ display: "flex", gap: "0.5rem" }}><span>â ï¸</span><span>After 2-year fixed period, floating rates could rise to {postFixedRate}%+, increasing monthly payments</span></div>
+                      <div style={{ display: "flex", gap: "0.5rem" }}><span>â ï¸</span><span>You're also paying $2,900/mo rent on your own home â total housing cost is high</span></div>
+                    </div>
+                  </Card>
+                </div>
+
+                {/* Cash Flow Reality Check */}
+                <Card title="Monthly Cash Flow Reality Check" color="amber" className="mb-6">
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
+                    <div style={{ background: "white", borderRadius: "0.5rem", padding: "0.75rem", textAlign: "center" }}>
+                      <div className="text-sm text-gray-500" style={{ marginBottom: "0.25rem" }}>If You Keep & Rent</div>
+                      <div style={{ fontSize: "1.25rem", fontWeight: "bold", color: "#111827" }}>{fmt(monthlyCashFlowExpected - PROPERTY.personalRent)}/mo</div>
+                      <div className="text-xs text-gray-400">Net of property cash flow + your own rent ($2,900)</div>
+                    </div>
+                    <div style={{ background: "white", borderRadius: "0.5rem", padding: "0.75rem", textAlign: "center" }}>
+                      <div className="text-sm text-gray-500" style={{ marginBottom: "0.25rem" }}>If You Sell</div>
+                      <div style={{ fontSize: "1.25rem", fontWeight: "bold", color: "#111827" }}>{fmt(-PROPERTY.personalRent)}/mo</div>
+                      <div className="text-xs text-gray-400">Only paying your own rent ($2,900), no property costs</div>
+                    </div>
+                    <div style={{ background: "white", borderRadius: "0.5rem", padding: "0.75rem", textAlign: "center" }}>
+                      <div className="text-sm text-gray-500" style={{ marginBottom: "0.25rem" }}>Monthly Difference</div>
+                      <div style={{ fontSize: "1.25rem", fontWeight: "bold", color: monthlyCashFlowExpected >= 0 ? "#16a34a" : "#dc2626" }}>{fmt(Math.abs(monthlyCashFlowExpected))}/mo</div>
+                      <div className="text-xs text-gray-400">{monthlyCashFlowExpected >= 0 ? "Better off keeping (rental profit)" : "Better off selling (stop bleeding)"}</div>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {activeTab === "market" && (
+              <div>
+                <Card title="Scenario Toggles â What Could Change?" color="purple" className="mb-6">
+                  <p className="text-sm text-gray-500" style={{ marginBottom: "0.75rem" }}>Toggle these scenarios to see how they might affect the market outlook and your decision.</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "0.75rem" }}>
+                    <ScenarioToggle label="ABSD Reduction for Citizens" description="Government lowers ABSD from 20% to 12-15% for 2nd property" active={absdReduction} onChange={setAbsdReduction} impact="Would boost demand from Singaporean upgraders/investors. Likely +1.5% to property prices. More buyers in the market = easier exit if you hold." />
+                    <ScenarioToggle label="Iran War Escalation" description="Prolonged conflict, oil above $120/bbl, inflation spike" active={iranEscalation} onChange={setIranEscalation} impact="Oil price spike â higher inflation â MAS tightens policy â delayed rate cuts. Could dampen sentiment and slow price growth by ~1%." />
+                    <ScenarioToggle label="Interest Rate Reversal" description="SORA climbs back above 2.5% due to sticky inflation" active={rateHike} onChange={setRateHike} impact="Higher rates = higher mortgage costs post-fixed period + lower affordability = dampened demand. Could reduce price growth by ~1.5%." />
+                    <ScenarioToggle label="Supply Glut from New Launches" description="8,400+ new units in 2026 + competing nearby condo flood market" active={supplyGlut} onChange={setSupplyGlut} impact="Excess supply pressures both rents and prices. D15 particularly affected with new nearby condo. Could reduce rents by $200-400/mo and slow appreciation by ~1%." />
+                  </div>
+                  <div style={{ marginTop: "1rem", padding: "0.75rem", background: "white", borderRadius: "0.5rem" }}>
+                    <span className="text-sm font-semibold text-gray-700">Adjusted Appreciation Forecast:&nbsp;</span>
+                    <span style={{ color: scenarioAppreciation >= 0 ? "#16a34a" : "#dc2626", fontWeight: 600 }}>{scenarioAppreciation >= 0 ? "+" : ""}{scenarioAppreciation.toFixed(1)}% p.a.</span>
+                    <span className="text-gray-400 text-sm" style={{ marginLeft: "0.5rem" }}>(Base: {annualAppreciation}%)</span>
+                  </div>
+                </Card>
+
+                <Card title="URA Private Residential Price Index (2022â2025)" color="blue" className="mb-6">
+                  <p className="text-xs text-gray-500" style={{ marginBottom: "0.75rem" }}>Full-year 2025 growth slowed to 3.4%. Analysts forecast 2-5% growth for 2026.</p>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <AreaChart data={URA_INDEX_DATA} margin={{ top: 10, right: 20, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="quarter" tick={{ fontSize: 11 }} interval={1} />
+                      <YAxis domain={[170, 215]} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="index" stroke="#2563eb" fill="#93c5fd" fillOpacity={0.3} strokeWidth={2} name="Price Index" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </Card>
+
+                <Card title="Interest Rate Trends â SORA & Fixed Rates" color="teal" className="mb-6">
+                  <p className="text-xs text-gray-500" style={{ marginBottom: "0.75rem" }}>3M SORA at 1.12% (Mar'26). Forecast to bottom near 1% in Q2'26, then rebound to ~1.35% by year-end.</p>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <LineChart data={INTEREST_RATE_DATA} margin={{ top: 10, right: 20, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+                      <YAxis domain={[0, 4.5]} tick={{ fontSize: 11 }} tickFormatter={v => v + "%"} />
+                      <Tooltip formatter={v => v + "%"} />
+                      <Legend />
+                      <Line type="monotone" dataKey="sora3m" stroke="#0d9488" strokeWidth={2} name="3M SORA" dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="fixed2y" stroke="#d97706" strokeWidth={2} name="2Y Fixed" dot={{ r: 3 }} strokeDasharray="5 5" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Card>
+
+                <Card title="Private Condo Supply Pipeline" color="amber" className="mb-6">
+                  <p className="text-xs text-gray-500" style={{ marginBottom: "0.75rem" }}>~8,400 units expected in 2026 (65% in OCR). Heavy supply in 2026-2027 may moderate price growth.</p>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={SUPPLY_PIPELINE} margin={{ top: 10, right: 20, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="year" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip formatter={v => v.toLocaleString() + " units"} />
+                      <Bar dataKey="units" name="Units" radius={[6, 6, 0, 0]}>
+                        {SUPPLY_PIPELINE.map((entry, i) => (
+                          <Cell key={i} fill={entry.label === "Actual" ? "#2563eb" : entry.label === "Expected" ? "#d97706" : "#9ca3af"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div style={{ display: "flex", gap: "1rem", justifyContent: "center", marginTop: "0.5rem" }} className="text-xs text-gray-500">
+                    <span style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}><span style={{ width: "0.75rem", height: "0.75rem", background: "#2563eb", borderRadius: "0.125rem", display: "inline-block" }} /> Actual</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}><span style={{ width: "0.75rem", height: "0.75rem", background: "#d97706", borderRadius: "0.125rem", display: "inline-block" }} /> Expected</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}><span style={{ width: "0.75rem", height: "0.75rem", background: "#9ca3af", borderRadius: "0.125rem", display: "inline-block" }} /> Projected</span>
+                  </div>
+                </Card>
+
+                <Card title="ABSD Rates (Current, Since Apr 2023)" color="gray" className="mb-6">
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }} className="text-sm">
+                      <thead>
+                        <tr style={{ background: "#f3f4f6" }}>
+                          <th style={{ textAlign: "left", padding: "0.5rem" }}>Profile</th>
+                          <th style={{ textAlign: "center", padding: "0.5rem" }}>1st Property</th>
+                          <th style={{ textAlign: "center", padding: "0.5rem" }}>2nd Property</th>
+                          <th style={{ textAlign: "center", padding: "0.5rem" }}>3rd+</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr style={{ borderBottom: "1px solid #f3f4f6", background: "#f0fdfa" }}>
+                          <td style={{ padding: "0.5rem", fontWeight: 500 }}>Singapore Citizen</td>
+                          <td style={{ textAlign: "center", padding: "0.5rem" }}>0%</td>
+                          <td style={{ textAlign: "center", padding: "0.5rem", fontWeight: "bold", color: "#dc2626" }}>20%</td>
+                          <td style={{ textAlign: "center", padding: "0.5rem", fontWeight: "bold", color: "#dc2626" }}>30%</td>
+                        </tr>
+                        <tr style={{ borderBottom: "1px solid #f3f4f6" }}>
+                          <td style={{ padding: "0.5rem", fontWeight: 500 }}>Permanent Resident</td>
+                          <td style={{ textAlign: "center", padding: "0.5rem" }}>5%</td>
+                          <td style={{ textAlign: "center", padding: "0.5rem" }}>30%</td>
+                          <td style={{ textAlign: "center", padding: "0.5rem" }}>35%</td>
+                        </tr>
+                        <tr style={{ borderBottom: "1px solid #f3f4f6" }}>
+                          <td style={{ padding: "0.5rem", fontWeight: 500 }}>Foreigner</td>
+                          <td style={{ textAlign: "center", padding: "0.5rem", fontWeight: "bold", color: "#dc2626" }}>60%</td>
+                          <td style={{ textAlign: "center", padding: "0.5rem", fontWeight: "bold", color: "#dc2626" }}>60%</td>
+                          <td style={{ textAlign: "center", padding: "0.5rem", fontWeight: "bold", color: "#dc2626" }}>60%</td>
+                        </tr>
+                        <tr>
+                          <td style={{ padding: "0.5rem", fontWeight: 500 }}>Entity / Trust</td>
+                          <td style={{ textAlign: "center", padding: "0.5rem" }}>65%</td>
+                          <td style={{ textAlign: "center", padding: "0.5rem" }}>65%</td>
+                          <td style={{ textAlign: "center", padding: "0.5rem" }}>65%</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="text-xs text-gray-500" style={{ marginTop: "0.75rem" }}>
+                    <strong>Note:</strong> ABSD does not apply to commercial properties. No changes announced for 2026. If you sell and later buy a 2nd residential property, you'd face 20% ABSD as a Singapore citizen.
+                  </div>
+                </Card>
+
+                <Card title="Market Assessment Summary" color="teal" className="mb-6">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }} className="text-sm text-gray-700">
+                    <div style={{ padding: "0.75rem", background: "white", borderRadius: "0.5rem" }}>
+                      <div className="font-semibold text-gray-900" style={{ marginBottom: "0.25rem" }}>Is the market overpriced or underpriced?</div>
+                      <p>Singapore private residential prices have risen steadily but growth is decelerating (3.4% in 2025, slowest since 2020). With analysts projecting 2-5% growth in 2026 and falling interest rates supporting affordability, the market appears <strong>fairly valued to slightly stretched</strong> â not a bubble, but not a bargain either. Freehold D15 properties near new MRT lines tend to hold value well.</p>
+                    </div>
+                    <div style={{ padding: "0.75rem", background: "white", borderRadius: "0.5rem" }}>
+                      <div className="font-semibold text-gray-900" style={{ marginBottom: "0.25rem" }}>Iran War Impact</div>
+                      <p>The conflict caused oil to spike above $110/bbl, raising inflation concerns. For Singapore property, the main transmission is through delayed rate cuts and dampened sentiment. Historically, geopolitical shocks create short-term hesitation but not structural collapses. The bigger risk is if oil stays elevated long enough to reverse the current rate-cutting cycle.</p>
+                    </div>
+                    <div style={{ padding: "0.75rem", background: "white", borderRadius: "0.5rem" }}>
+                      <div className="font-semibold text-gray-900" style={{ marginBottom: "0.25rem" }}>ABSD Outlook</div>
+                      <p>No changes announced for 2026. A reduction would be bullish for property demand. Some analysts speculate the government may revisit rates if transaction volumes drop significantly, but nothing is imminent. ABSD does not apply to commercial properties.</p>
+                    </div>
+                    <div style={{ padding: "0.75rem", background: "white", borderRadius: "0.5rem" }}>
+                      <div className="font-semibold text-gray-900" style={{ marginBottom: "0.25rem" }}>Rental Market Outlook</div>
+                      <p>Rents are flat to slightly up (0-3% forecast for 2026). Vacancy fell to 6.0% in Q4'25. However, heavy new supply from nearby launches could specifically pressure D15 rents. Your current $3,600/mo rent is likely above what a new tenant would pay given the competition.</p>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            <div style={{ textAlign: "center", marginTop: "2rem", marginBottom: "1rem" }} className="text-xs text-gray-400">
+              8M Residences Decision Analysis Â· March 2026
+              <br />Not financial advice. All projections are estimates based on assumptions that may not materialise.
+              <br />Consult a licensed financial advisor before making investment decisions.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById("root"));
+  </script>
+</body>
+</html>
